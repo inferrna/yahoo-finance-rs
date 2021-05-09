@@ -5,4 +5,4 @@ mod realtime;
 pub use realtime::{PricingData, PricingData_MarketHoursType};
 
 mod web_scraper;
-pub use web_scraper::{scrape, QuoteSummaryStore, CompanyProfile};
+pub use web_scraper::{scrape, CompanyProfile, QuoteSummaryStore};
