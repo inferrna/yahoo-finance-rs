@@ -22,7 +22,7 @@
 //!
 //!    // print out some high numbers!
 //!    for bar in &data {
-//!       println!("Apple hit an intraday high of ${:.2} on {}.", bar.high, bar.datetime().format("%b %e %Y"));
+//!       println!("Apple hit an intraday high of ${:.2} on {}.", bar.bar.high, bar.bar.datetime().format("%b %e %Y"));
 //!    }
 //! }
 //! ```
@@ -64,7 +64,12 @@
 #[macro_use]
 mod macros;
 
-pub use market_finance::{Bar, Interval, Quote, Timestamped, TradingSession};
+pub use market_finance::Bar as MarketBar;
+pub use market_finance::{Interval, Quote, Timestamped, TradingSession};
+
+/// Combined information about a quote
+mod bar;
+pub use bar::Bar;
 
 mod error;
 use snafu::Snafu;

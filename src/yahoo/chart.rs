@@ -48,7 +48,18 @@ ez_serde!(OHLCV {
    volumes: Vec<Option<u64>>
 });
 
-ez_serde!(Indicators { #[serde(rename = "quote", default)] quotes: Vec<OHLCV> });
+ez_serde!(AdjustedClose {
+    #[serde(rename = "adjclose", default)]
+    adjusted_closes: Vec<Option<f64>>
+});
+
+ez_serde!(Indicators {
+    #[serde(rename = "quote", default)]
+    quotes: Vec<OHLCV>,
+
+    #[serde(rename = "adjclose", default)]
+    adjusted_closes: Vec<AdjustedClose>
+});
 
 ez_serde!(Data {
    meta: Meta,

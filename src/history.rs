@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use market_finance::Bar as MarketBar;
 use snafu::{ensure, OptionExt};
 
 use crate::{error, yahoo, Bar, Interval, Result};
@@ -8,9 +9,10 @@ fn aggregate_bars(data: yahoo::Data) -> Result<Vec<Bar>> {
 
     let timestamps = &data.timestamps;
     let quotes = &data.indicators.quotes;
+    let adjusted_closes = &data.indicators.adjusted_closes;
 
     // if we have no timestamps & no quotes we'll assume there is no data
-    if timestamps.is_empty() && quotes.is_empty() {
+    if timestamps.is_empty() && quotes.is_empty() && adjusted_closes.is_empty() {
         return Ok(result);
     }
 
@@ -27,9 +29,16 @@ fn aggregate_bars(data: yahoo::Data) -> Result<Vec<Bar>> {
             reason: "no OHLCV data"
         }
     );
+    ensure!(
+        !adjusted_closes.is_empty(),
+        error::MissingData {
+            reason: "no adjusted close data"
+        }
+    );
 
     // make sure timestamps lines up with the OHLCV data
     let quote = &quotes[0];
+    let adjusted_close = &adjusted_closes[0];
     ensure!(
         timestamps.len() == quote.volumes.len(),
         error::MissingData {
@@ -60,6 +69,12 @@ fn aggregate_bars(data: yahoo::Data) -> Result<Vec<Bar>> {
             reason: "'close' values do not line up the timestamps"
         }
     );
+    ensure!(
+        timestamps.len() == adjusted_close.adjusted_closes.len(),
+        error::MissingData {
+            reason: "'adjusted close' values do not line up the timestamps"
+        }
+    );
 
     #[allow(clippy::needless_range_loop)]
     for i in 0..timestamps.len() {
@@ -68,25 +83,31 @@ fn aggregate_bars(data: yahoo::Data) -> Result<Vec<Bar>> {
             || quote.highs[i].is_none()
             || quote.lows[i].is_none()
             || quote.closes[i].is_none()
+            || adjusted_close.adjusted_closes[i].is_none()
         {
             continue;
         }
 
         result.push(Bar {
-            timestamp: timestamps[i] * 1000,
-            open: quote.opens[i].context(error::InternalLogic {
-                reason: "missing open not caught",
+            bar: MarketBar {
+                timestamp: timestamps[i] * 1000,
+                open: quote.opens[i].context(error::InternalLogic {
+                    reason: "missing open not caught",
+                })?,
+                high: quote.highs[i].context(error::InternalLogic {
+                    reason: "missing high not caught",
+                })?,
+                low: quote.lows[i].context(error::InternalLogic {
+                    reason: "missing low not caught",
+                })?,
+                close: quote.closes[i].context(error::InternalLogic {
+                    reason: "missing close not caught",
+                })?,
+                volume: quote.volumes[i],
+            },
+            adjusted_close: adjusted_close.adjusted_closes[i].context(error::InternalLogic {
+                reason: "missing adjusted close not caught",
             })?,
-            high: quote.highs[i].context(error::InternalLogic {
-                reason: "missing high not caught",
-            })?,
-            low: quote.lows[i].context(error::InternalLogic {
-                reason: "missing low not caught",
-            })?,
-            close: quote.closes[i].context(error::InternalLogic {
-                reason: "missing close not caught",
-            })?,
-            volume: quote.volumes[i],
         })
     }
     Ok(result)
@@ -108,7 +129,7 @@ fn aggregate_bars(data: yahoo::Data) -> Result<Vec<Bar>> {
 ///       Err(e) => println!("Failed to call Yahoo: {:?}", e),
 ///       Ok(data) =>
 ///          for bar in &data {
-///             println!("On {} Apple closed at ${:.2}", bar.datetime().format("%b %e %Y"), bar.close)
+///             println!("On {} Apple closed at ${:.2}", bar.bar.datetime().format("%b %e %Y"), bar.bar.close)
 ///          }
 ///    }
 /// }
@@ -135,7 +156,7 @@ pub async fn retrieve(symbol: &str) -> Result<Vec<Bar>> {
 ///       Err(e) => println!("Failed to call Yahoo: {:?}", e),
 ///       Ok(data) =>
 ///          for bar in &data {
-///             println!("On {} Apple closed at ${:.2}", bar.datetime().format("%b %e %Y"), bar.close)
+///             println!("On {} Apple closed at ${:.2}", bar.bar.datetime().format("%b %e %Y"), bar.bar.close)
 ///          }
 ///    }
 /// }
@@ -164,7 +185,7 @@ pub async fn retrieve_interval(symbol: &str, interval: Interval) -> Result<Vec<B
 ///       Err(e) => println!("Failed to call Yahoo {:?}", e),
 ///       Ok(data) =>
 ///          for bar in &data {
-///             println!("On {} Apple closed at ${:.2}", bar.datetime().format("%b %e %Y"), bar.close)
+///             println!("On {} Apple closed at ${:.2}", bar.bar.datetime().format("%b %e %Y"), bar.bar.close)
 ///          }
 ///    }
 /// }
