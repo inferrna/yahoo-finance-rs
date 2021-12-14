@@ -114,7 +114,7 @@ impl Streamer {
             })
     }
 
-    pub fn stop(&mut self) {
+    pub fn stop(&self) {
         let mut shutdown = self.shutdown.lock().unwrap();
         *shutdown = true;
     }
