@@ -1,9 +1,10 @@
 use base64::decode;
 use futures::{future, SinkExt, Stream, StreamExt};
-use protobuf::parse_from_bytes;
 use serde::Serialize;
 use std::sync::{mpsc, Arc, Mutex};
+use std::time::Duration;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use tokio_tungstenite::tungstenite::Error;
 
 use crate::yahoo::{PricingData, PricingData_MarketHoursType};
 use crate::TradingSession;
@@ -47,12 +48,11 @@ impl Streamer {
         }
     }
 
-    pub async fn stream(&self) -> impl Stream<Item = Quote> {
+    pub async fn stream(&self) -> impl Stream<Item = Result<Quote, Error>> {
         let (tx, rx) = mpsc::channel();
 
         let (stream, _) = connect_async("wss://streamer.finance.yahoo.com")
-            .await
-            .unwrap();
+            .await.unwrap();
         let (mut sink, source) = stream.split();
 
         // send the symbols we are interested in streaming
@@ -72,9 +72,12 @@ impl Streamer {
                 }
 
                 // we're still running - so get a message and send it out.
-                // TODO - change this to WAIT on receive so that we don't block shutdown
-                let msg = rx.recv().unwrap();
-                sink.send(msg).await.unwrap();
+                let res_msg = rx.try_recv();
+                if let Ok(msg) = res_msg {
+                    sink.send(msg).await.unwrap();
+                } else {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
             }
         });
 
@@ -82,35 +85,41 @@ impl Streamer {
         let shutdown = self.shutdown.clone();
         source
             .filter_map(move |msg| {
-                match msg.unwrap() {
-                    Message::Ping(_) => {
-                        pong_tx
-                            .send(Message::Pong("pong".as_bytes().to_vec()))
-                            .unwrap();
+                match msg {
+                    Ok(ok_msg) => {
+                        match ok_msg {
+                            Message::Ping(_) => {
+                                pong_tx
+                                    .send(Message::Pong("pong".as_bytes().to_vec()))
+                                    .unwrap();
+                            }
+                            Message::Close(_) => {
+                                *(shutdown.lock().unwrap()) = true;
+                            }
+                            Message::Text(value) => {
+                                return future::ready(Some(Ok(value)));
+                            }
+                            Message::Binary(value) => {
+                                return future::ready(Some(Ok(String::from_utf8(value).unwrap())));
+                            }
+                            _ => {}
+                        }
                     }
-                    Message::Close(_) => {
-                        *(shutdown.lock().unwrap()) = true;
-                    }
-                    Message::Text(value) => {
-                        return future::ready(Some(value));
-                    }
-                    Message::Binary(value) => {
-                        return future::ready(Some(String::from_utf8(value).unwrap()));
-                    }
-                    _ => {}
+                    Err(e) => return future::ready(Some(Err(e)))
                 };
                 return future::ready(None);
             })
             .map(move |msg| {
-                let data = parse_from_bytes::<PricingData>(&decode(msg).unwrap()).unwrap();
-
-                Quote {
-                    symbol: data.id.to_string(),
-                    timestamp: data.time as i64,
-                    session: convert_session(data.marketHours),
-                    price: data.price as f64,
-                    volume: data.dayVolume as u64,
-                }
+                let data: PricingData = protobuf::Message::parse_from_bytes(&decode(msg?).unwrap()).unwrap();
+                Ok(
+                    Quote {
+                        symbol: data.id.to_string(),
+                        timestamp: data.time as i64,
+                        session: convert_session(data.marketHours),
+                        price: data.price as f64,
+                        volume: data.dayVolume as u64,
+                    }
+                )
             })
     }
 
