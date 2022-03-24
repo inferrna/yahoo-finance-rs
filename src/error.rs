@@ -9,6 +9,12 @@ pub enum InnerError {
     #[snafu(display("Yahoo! returned invalid data - {}", source.to_string()))]
     BadData { source: serde_json::Error },
 
+    #[snafu(display("Yahoo! socket error - {}", source.to_string()))]
+    SocketError { source: tokio_tungstenite::tungstenite::Error },
+
+    #[snafu(display("Error sending message to stream - {}", source.to_string()))]
+    SendError { source: std::sync::mpsc::SendError<tokio_tungstenite::tungstenite::Message> },
+
     #[snafu(display("Yahoo! call failed. '{}' returned a {} result.", url, status))]
     CallFailed { url: String, status: u16 },
 

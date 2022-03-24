@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
-use tokio_tungstenite::tungstenite::Error;
+use crate::error::InnerError;
 
 use crate::yahoo::{PricingData, PricingData_MarketHoursType};
 use crate::TradingSession;
@@ -48,7 +48,7 @@ impl Streamer {
         }
     }
 
-    pub async fn stream(&self) -> impl Stream<Item = Result<Quote, Error>> {
+    pub async fn stream(&self) -> impl Stream<Item = Result<Quote, InnerError>> {
         let (tx, rx) = mpsc::channel();
 
         let (stream, _) = connect_async("wss://streamer.finance.yahoo.com")
@@ -76,7 +76,7 @@ impl Streamer {
                 if let Ok(msg) = res_msg {
                     sink.send(msg).await.unwrap();
                 } else {
-                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    tokio::time::sleep(Duration::from_millis(333)).await;
                 }
             }
         });
@@ -88,10 +88,9 @@ impl Streamer {
                 match msg {
                     Ok(ok_msg) => {
                         match ok_msg {
-                            Message::Ping(_) => {
-                                pong_tx
-                                    .send(Message::Pong("pong".as_bytes().to_vec()))
-                                    .unwrap();
+                            Message::Ping(_) => match pong_tx.send(Message::Pong("pong".as_bytes().to_vec())) {
+                                Ok(_) => {}
+                                Err(e) => return future::ready(Some(Err(InnerError::SendError{ source: e } )))
                             }
                             Message::Close(_) => {
                                 *(shutdown.lock().unwrap()) = true;
@@ -105,12 +104,12 @@ impl Streamer {
                             _ => {}
                         }
                     }
-                    Err(e) => return future::ready(Some(Err(e)))
+                    Err(e) => return future::ready(Some(Err(InnerError::SocketError{ source: e })))
                 };
                 return future::ready(None);
             })
             .map(move |msg| {
-                let data: PricingData = protobuf::Message::parse_from_bytes(&decode(msg?).unwrap()).unwrap();
+                let data: PricingData = protobuf::Message::parse_from_bytes(&decode(&msg?).unwrap().as_bytes()).unwrap();
                 Ok(
                     Quote {
                         symbol: data.id.to_string(),
