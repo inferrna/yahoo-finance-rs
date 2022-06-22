@@ -6,7 +6,7 @@ use std::time::Duration;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use crate::error::InnerError;
 
-use crate::yahoo::{PricingData, PricingData_MarketHoursType};
+use crate::yahoo::{PricingData, MarketHoursType};
 use crate::TradingSession;
 
 use super::Quote;
@@ -16,11 +16,11 @@ struct Subs {
     subscribe: Vec<String>,
 }
 
-fn convert_session(value: PricingData_MarketHoursType) -> TradingSession {
+fn convert_session(value: MarketHoursType) -> TradingSession {
     match value {
-        PricingData_MarketHoursType::PRE_MARKET => TradingSession::PreMarket,
-        PricingData_MarketHoursType::REGULAR_MARKET => TradingSession::Regular,
-        PricingData_MarketHoursType::POST_MARKET => TradingSession::AfterHours,
+        MarketHoursType::PRE_MARKET => TradingSession::PreMarket,
+        MarketHoursType::REGULAR_MARKET => TradingSession::Regular,
+        MarketHoursType::POST_MARKET => TradingSession::AfterHours,
         _ => TradingSession::Other,
     }
 }
@@ -99,7 +99,10 @@ impl Streamer {
                                 return future::ready(Some(Ok(value)));
                             }
                             Message::Binary(value) => {
-                                return future::ready(Some(Ok(String::from_utf8(value).unwrap())));
+                                return match String::from_utf8(value) {
+                                    Ok(s) => future::ready(Some(Ok(s))),
+                                    Err(e) => future::ready(Some(Err(InnerError::Utf8DecodeError { stage: "stream decode".to_string(), source: e })))
+                                };
                             }
                             _ => {}
                         }
@@ -109,12 +112,15 @@ impl Streamer {
                 return future::ready(None);
             })
             .map(move |msg| {
-                let data: PricingData = protobuf::Message::parse_from_bytes(&decode(&msg?).unwrap().as_bytes()).unwrap();
+                let data: PricingData = protobuf::Message::parse_from_bytes(&decode(&msg?)
+                .map_err(|e| InnerError::Base64DecodeError { stage: "stream decode".to_string(), source: e })?
+                )
+                .map_err(|e| InnerError::ProtobufParseError { stage: "stream decode".to_string(), source: e })?;
                 Ok(
                     Quote {
                         symbol: data.id.to_string(),
                         timestamp: data.time as i64,
-                        session: convert_session(data.marketHours),
+                        session: convert_session(data.marketHours.unwrap() ),
                         price: data.price as f64,
                         volume: data.dayVolume as u64,
                     }

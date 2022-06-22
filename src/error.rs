@@ -48,6 +48,15 @@ pub enum InnerError {
     #[snafu(display("Unexpected error while reading data from '{}'", url))]
     UnexpectedErrorRead { url: String, source: reqwest::Error },
 
+    #[snafu(display("Parse protobuf failed at {}, got: '{}'", stage, source.to_string()))]
+    ProtobufParseError { stage: String, source: protobuf::Error },
+
+    #[snafu(display("Base64 decode failed at {}, got: '{}'", stage, source.to_string()))]
+    Base64DecodeError { stage: String, source: base64::DecodeError },
+
+    #[snafu(display("Utf8 decode failed at {}, got: '{}'", stage, source.to_string()))]
+    Utf8DecodeError { stage: String, source: std::string::FromUtf8Error },
+
     #[snafu(display("Yahoo! call failed.  Expected data is missing."))]
     UnexpectedErrorYahoo,
 
