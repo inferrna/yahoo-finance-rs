@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use tokio_tungstenite::tungstenite::Error;
 use crate::error::InnerError;
 
 use crate::yahoo::{PricingData, MarketHoursType};
@@ -73,10 +74,20 @@ impl Streamer {
 
                 // we're still running - so get a message and send it out.
                 let res_msg = rx.try_recv();
-                if let Ok(msg) = res_msg {
-                    sink.send(msg).await.unwrap();
-                } else {
-                    tokio::time::sleep(Duration::from_millis(333)).await;
+                match res_msg {
+                    Ok(msg) => match sink.send(msg).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            #[cfg(feature = "logging")]
+                            error!("Can't send msg to yahoo, got error {:?}", e);
+                            tokio::time::sleep(Duration::from_millis(333)).await;
+                        }
+                    },
+                    Err(e) => {
+                        #[cfg(feature = "logging")]
+                        error!("Can't get msg from channel, got error {:?}", e);
+                        tokio::time::sleep(Duration::from_millis(333)).await;
+                    }
                 }
             }
         });

@@ -28,7 +28,10 @@ tokio = { version = "^1.9", features = [ "macros", "rt-multi-thread" ],  default
 tokio-stream = "^0.1"
 tokio-tungstenite = { version = "*", features = [ "rustls-tls" ] }
 url = "^2"
+log = { version = "*", optional = true }
 
+[features]
+logging = ["dep:log"]
 
 [dev-dependencies]
 mockito = "^0.31"
