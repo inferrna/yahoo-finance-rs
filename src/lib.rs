@@ -91,3 +91,7 @@ pub use streaming::Streamer;
 /// Symbol profile
 mod profile;
 pub use profile::Profile;
+
+#[cfg(feature = "logging")]
+#[macro_use]
+extern crate log;
