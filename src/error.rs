@@ -10,10 +10,14 @@ pub enum InnerError {
     BadData { source: serde_json::Error },
 
     #[snafu(display("Yahoo! socket error - {}", source.to_string()))]
-    SocketError { source: tokio_tungstenite::tungstenite::Error },
+    SocketError {
+        source: tokio_tungstenite::tungstenite::Error,
+    },
 
     #[snafu(display("Error sending message to stream - {}", source.to_string()))]
-    SendError { source: std::sync::mpsc::SendError<tokio_tungstenite::tungstenite::Message> },
+    SendError {
+        source: std::sync::mpsc::SendError<tokio_tungstenite::tungstenite::Message>,
+    },
 
     #[snafu(display("Yahoo! call failed. '{}' returned a {} result.", url, status))]
     CallFailed { url: String, status: u16 },
@@ -49,13 +53,22 @@ pub enum InnerError {
     UnexpectedErrorRead { url: String, source: reqwest::Error },
 
     #[snafu(display("Parse protobuf failed at {}, got: '{}'", stage, source.to_string()))]
-    ProtobufParseError { stage: String, source: protobuf::Error },
+    ProtobufParseError {
+        stage: String,
+        source: protobuf::Error,
+    },
 
     #[snafu(display("Base64 decode failed at {}, got: '{}'", stage, source.to_string()))]
-    Base64DecodeError { stage: String, source: base64::DecodeError },
+    Base64DecodeError {
+        stage: String,
+        source: base64::DecodeError,
+    },
 
     #[snafu(display("Utf8 decode failed at {}, got: '{}'", stage, source.to_string()))]
-    Utf8DecodeError { stage: String, source: std::string::FromUtf8Error },
+    Utf8DecodeError {
+        stage: String,
+        source: std::string::FromUtf8Error,
+    },
 
     #[snafu(display("Yahoo! call failed.  Expected data is missing."))]
     UnexpectedErrorYahoo,
